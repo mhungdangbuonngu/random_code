@@ -172,81 +172,6 @@ if 'postgres_url' in st.session_state and st.session_state.postgres_url:
         conn.close()
 
         return data, id_col
-
-    # Chọn loại dữ liệu: Restaurant, TouristAttraction, Hotel
-    data_type = st.selectbox("Chọn loại địa điểm", ["Restaurant", "TouristAttraction", "Hotel"])
-
-    # Kiểm tra nếu dữ liệu của loại đã chọn chưa được lưu trong session_state thì mới query
-    if f'{data_type}_data' not in st.session_state:
-        st.session_state[f'{data_type}_data'], st.session_state[f'{data_type}_id_col'] = get_data_by_type(data_type)
-
-    # Lấy dữ liệu từ session_state
-    data = st.session_state[f'{data_type}_data']
-    id_col = st.session_state[f'{data_type}_id_col']
-
-    # Random chọn 50 địa điểm từ dữ liệu
-    if 'selected_data' not in st.session_state or st.session_state['data_type'] != data_type:
-        random.shuffle(data)
-        st.session_state['selected_data'] = data[:50]  # Lấy 50 địa điểm ngẫu nhiên
-        st.session_state['data_type'] = data_type
-
-    # Tạo tiêu đề cho ứng dụng
-    st.title(f"Nhấn vào điểm để xem thông tin chi tiết ({data_type})")
-
-    # Tạo layout với hai cột: cột cho bản đồ và cột cho thông tin chi tiết
-    col1, col2, col3 = st.columns([2, 1, 1])  # Tỷ lệ 2:1:1 giữa bản đồ và thông tin and the schedule
-
-    # Tạo bản đồ với Folium trong cột đầu tiên
-    with col1:
-        mymap = folium.Map(location=[21.0285, 105.8542], zoom_start=14)
-        
-        # Thêm các marker cho từng địa điểm
-        locations = {}
-        for item in st.session_state['selected_data']:
-            loc_id, name, street, district, city, lat, lon, description = item
-            if lat is not None and lon is not None:  # Kiểm tra location có giá trị
-                address = f"{street}, {district}, {city}"
-                locations[name] = {
-                    "id": loc_id,
-                    "type": data_type,
-                    "coordinates": [lat, lon],
-                    "description": description,
-                    "address": address
-                }
-                folium.Marker(
-                    location=[lat, lon],
-                    popup=name,
-                    icon=folium.Icon(color="green")
-                ).add_to(mymap)
-
-        # Hiển thị bản đồ trong cột 1
-        st_data = st_folium(mymap, width=700, height=500)
-
-    # Sử dụng session_state để lưu trạng thái khi chọn địa điểm
-    if 'scenarios' not in st.session_state:
-        st.session_state.scenarios = {}  # Dictionary để lưu các kịch bản và hội thoại
-
-    if 'last_selected' not in st.session_state:
-        st.session_state.last_selected = None
-
-    # Hiển thị thông tin chi tiết trong cột thứ hai
-    with col2:
-        # Kiểm tra nếu người dùng đã click vào một marker
-        if st_data and st_data["last_object_clicked"]:
-            clicked_location = st_data["last_object_clicked"]["lat"], st_data["last_object_clicked"]["lng"]
-
-            # Tìm thông tin địa điểm dựa trên tọa độ đã click
-            for name, info in locations.items():
-                if clicked_location == tuple(info["coordinates"]):
-                    # Hiển thị thông tin chi tiết của địa điểm đã chọn
-                    st.subheader(f"Thông tin chi tiết: {name}")
-                    st.write(info["description"])
-                    st.write(f"Địa chỉ: {info['address']}")
-
-                    # Lưu địa điểm đã click vào session_state
-                    st.session_state.last_selected = name
-
-                    break
     amenities_list_str=get_amenities()
     style_list_str=get_hotel_style()
     res_type_list_str=get_restaurant_types()
@@ -424,6 +349,81 @@ Nếu bạn cần thay đổi hoặc bổ sung bất kỳ thông tin nào, vui l
     "attraction_type_list": att_type_list_str
 })   
         return response1.content  
+    # Chọn loại dữ liệu: Restaurant, TouristAttraction, Hotel
+    data_type = st.selectbox("Chọn loại địa điểm", ["Restaurant", "TouristAttraction", "Hotel"])
+
+    # Kiểm tra nếu dữ liệu của loại đã chọn chưa được lưu trong session_state thì mới query
+    if f'{data_type}_data' not in st.session_state:
+        st.session_state[f'{data_type}_data'], st.session_state[f'{data_type}_id_col'] = get_data_by_type(data_type)
+
+    # Lấy dữ liệu từ session_state
+    data = st.session_state[f'{data_type}_data']
+    id_col = st.session_state[f'{data_type}_id_col']
+
+    # Random chọn 50 địa điểm từ dữ liệu
+    if 'selected_data' not in st.session_state or st.session_state['data_type'] != data_type:
+        random.shuffle(data)
+        st.session_state['selected_data'] = data[:50]  # Lấy 50 địa điểm ngẫu nhiên
+        st.session_state['data_type'] = data_type
+
+    # Tạo tiêu đề cho ứng dụng
+    st.title(f"Nhấn vào điểm để xem thông tin chi tiết ({data_type})")
+
+    # Tạo layout với hai cột: cột cho bản đồ và cột cho thông tin chi tiết
+    col1, col2, col3 = st.columns([2, 1, 1])  # Tỷ lệ 2:1:1 giữa bản đồ và thông tin and the schedule
+
+    # Tạo bản đồ với Folium trong cột đầu tiên
+    with col1:
+        mymap = folium.Map(location=[21.0285, 105.8542], zoom_start=14)
+        
+        # Thêm các marker cho từng địa điểm
+        locations = {}
+        for item in st.session_state['selected_data']:
+            loc_id, name, street, district, city, lat, lon, description = item
+            if lat is not None and lon is not None:  # Kiểm tra location có giá trị
+                address = f"{street}, {district}, {city}"
+                locations[name] = {
+                    "id": loc_id,
+                    "type": data_type,
+                    "coordinates": [lat, lon],
+                    "description": description,
+                    "address": address
+                }
+                folium.Marker(
+                    location=[lat, lon],
+                    popup=name,
+                    icon=folium.Icon(color="green")
+                ).add_to(mymap)
+
+        # Hiển thị bản đồ trong cột 1
+        st_data = st_folium(mymap, width=700, height=500)
+
+    # Sử dụng session_state để lưu trạng thái khi chọn địa điểm
+    if 'scenarios' not in st.session_state:
+        st.session_state.scenarios = {}  # Dictionary để lưu các kịch bản và hội thoại
+
+    if 'last_selected' not in st.session_state:
+        st.session_state.last_selected = None
+
+    # Hiển thị thông tin chi tiết trong cột thứ hai
+    with col2:
+        # Kiểm tra nếu người dùng đã click vào một marker
+        if st_data and st_data["last_object_clicked"]:
+            clicked_location = st_data["last_object_clicked"]["lat"], st_data["last_object_clicked"]["lng"]
+
+            # Tìm thông tin địa điểm dựa trên tọa độ đã click
+            for name, info in locations.items():
+                if clicked_location == tuple(info["coordinates"]):
+                    # Hiển thị thông tin chi tiết của địa điểm đã chọn
+                    st.subheader(f"Thông tin chi tiết: {name}")
+                    st.write(info["description"])
+                    st.write(f"Địa chỉ: {info['address']}")
+
+                    # Lưu địa điểm đã click vào session_state
+                    st.session_state.last_selected = name
+
+                    break
+
     # ---- Thao tác với các nút và hội thoại trong sidebar ----
     with st.sidebar:
         # Thêm nút "Tạo kịch bản mới"
@@ -431,8 +431,8 @@ Nếu bạn cần thay đổi hoặc bổ sung bất kỳ thông tin nào, vui l
             new_scenario_name = f"Kịch bản {len(st.session_state.scenarios) + 1}"
             st.session_state.scenarios[new_scenario_name] = {
                 "locations": [],
-                "conversations": []
-                
+                "conversations": [],
+                'schedule':[]
             }  # Tạo kịch bản với danh sách địa điểm và hội thoại
             st.success(f"Đã tạo {new_scenario_name}")
 
@@ -467,23 +467,46 @@ Nếu bạn cần thay đổi hoặc bổ sung bất kỳ thông tin nào, vui l
                 st.warning("Vui lòng tạo kịch bản trước khi lưu.")
             else:
                 st.warning("Vui lòng chọn một địa điểm hợp lệ trước khi lưu.")
+        
+        if 'scheduled_times' not in st.session_state:
+            st.session_state.scheduled_times = []    
+        if st.button("Sắp xếp và Lưu Lịch trình"):
+            # Create a table with time and ID selection for each location
+            with st.form("schedule_form"):
+                st.write("### Lịch trình cho các địa điểm")
+                selected_times = []
+                selected_ids = []
+                for i, location in enumerate(st.session_state.scenarios[selected_scenario]['locations']):
+                    col1, col2 = st.columns([2, 2])
 
-        if st.button("tao lich trinh"):
-            if st.session_state.last_selected:
-                locations=st.session_state.scenerios[selected_scenario]['location']
-                id_list=[location['id'] for location in locations]
-            if 'schedule' not in st.session_state.senerios[selected_scenario]:
-                st.session_state.scenerios[selected_scenario]['schedule']=[]
-                for i in range(0,len(st.session_state.scenarios[selected_scenario]["locations"])):
-                    selected_time = st.time_input(f"Chọn thời gian cho địa điểm {i+1}", key=f"time_{i}")
-                    selected_id = st.selectbox(f"Chọn ID cho địa điểm {i+1}", id_list, key=f"id_{i}")
-                
-                # Thêm lịch trình vào 'schedule'
-                    st.session_state.scenerios[selected_scenario]['schedule'].append({
-                        'time': selected_time.strftime('%H:%M'),
-                        'id': selected_id
-                    })
-                st.session_state.scenerios[selected_scenario]['schedule']=sorted(st.session_state.senerios[selected_scenario]['schedule'],key=lambda x:datetime.strptime(x['time'],'%H:%M'))
+                    # Time input selection for each location
+                    selected_time = col1.time_input(
+                        f"Chọn thời gian cho địa điểm {i+1}",
+                        value=datetime.strptime("0:0",'%H:%M').time(),
+                        key=f"time_{i}"
+                    )
+
+                    # ID selection for each location
+                    selected_id = col2.selectbox(
+                        f"Chọn ID cho địa điểm {i+1}",
+                        options=[loc['id'] for loc in st.session_state.scenarios[selected_scenario]['locations']],
+                        index=[loc['id'] for loc in st.session_state.scenarios[selected_scenario]['locations']].index(location['id']),
+                        key=f"id_{i}"
+                    )
+                    selected_times.append(selected_time)
+                    selected_ids.append(selected_id)
+                # Submit button
+                submitted = st.form_submit_button("lưu lịch trình")
+            if submitted:
+                schedule = sorted(zip(selected_times, selected_ids), key=lambda x: x[0])  # Sắp xếp theo thời gian tăng dan
+                st.session_state.scenarios[selected_scenario]['schedule'].extend(
+            {'time': time, 'id': location_id} for time, location_id in schedule
+                )
+            with col3:
+                st.write("lịch trình cho kịch bản")
+                for item in st.session_state.scenarios[selected_scenario]['schedule']:
+                    st.write(f"Thời gian: {item['time']} - ID Địa điểm: {item['id']}")
+                   
         # Kiểm tra biến conversation_input trong session_state
         if "conversation_input" not in st.session_state:
             st.session_state.conversation_input = ""
