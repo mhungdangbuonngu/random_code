@@ -305,7 +305,8 @@ Request: "{travel_output_json}"
 4. **Additional Questions:**
     - Only ask additional questions about hotels, restaurants, or tourist attractions if all required fields in the "General" section have non-null values.
 
-5. Questions about `"Time"` and `"Type"` MUST be ASKED FIRST ONLY if these fields are NULL
+5. Questions about `"Time"` and `"Type"` MUST be ASKED FIRST ONLY if these fields are NULL but if these two features is not null in the {travel_output_json}, you should not ask again.
+
 ---
 
 ### **Verification Process:**
@@ -351,8 +352,6 @@ Request: "{travel_output_json}"
 7. Additional Question (when General is complete):
    **"Bạn có muốn bổ sung thêm yêu cầu gì cho khách sạn, nhà hàng, hoặc địa điểm tham quan không?"**
 
-8. ending question: if user said something about they dont want to add more information or requirement into their requirements about the restaurant, hotel, or attraction place, and all the required information are filled(example: "không", "đó là tất cả những gì tôi muốn", "tôi không muốn đưa thêm thông tin gì hết"):
-    ** Cam on vi da cung cap thong tin, doi chung toi 1 luc de tinh toan duong di va dia diem cho ban**   
 ### **Special Case - City Validation:**
 If City has a value but not 'Hà Nội':
 **"Hiện tại chúng tôi chưa cung cấp dịch vụ cho thành phố này mà chỉ có tại Hà Nội, liệu bạn có muốn thay đổi thành phố không?"**
@@ -436,7 +435,7 @@ Extract general requirements from request while following these rules:
 
 **For Restaurants, also identify:**
 - Requirements: A summary text of specific requirements or preferences mentioned.
-- Restaurant_Type: From this list: {restaurant_type_list}
+- Restaurant_Type:Only get ONE type FROM this list: {restaurant_type_list}
 - Suitable_For: From this list: {suitable_for_list}
 
 **For Tourist Attractions, also identify:**
@@ -548,7 +547,7 @@ def ask_user(ask_chain, response, travel_type_list, companion_list, transport_li
     if not response1.content:
         st.error("The response content is empty.")
         return {}
-    st.session_state['contents'].append({"role": "assistant", "content":f"{response1.content.splitlines()}"})
+    st.session_state['contents'].append({"role": "assistant", "content":f"{response1.content.splitlines()[1]}"})
     #st.session_state['contents'].append({"role": "assistant", "content":"Cảm ơn bạn đã cung cấp thông tin! Tuy nhiên, tôi cần thêm một số thông tin để giúp bạn tốt hơn:"})
 
     # # Process each line in the response content as a separate question
@@ -610,6 +609,10 @@ def update_requires(update_chain, first_respond, travel_type_list, companion_lis
         # print("Failed to decode JSON:", e)
         # print("Raw response:", response.content)
         return None
+
+template3='''
+
+'''
 def parse_tour_duration(duration_str):
     # Parse the duration string in 'HH:MM:SS' format
     time_parts = list(map(int, duration_str.split(':')))
@@ -726,11 +729,7 @@ def compute_itinerary_fitness_experience(itinerary):
         locations.append(None)  # Add None if hotel location is missing
 
     # Add places' locations if they exist
-    for place in places_locations:
-        if place.get('location') and place['location'].get('coordinates'):
-            locations.append(place['location']['coordinates'])
-        else:
-            locations.append(None)  # Add None if place location is missing
+    locations.extend(places_locations)  # Add None if place location is missing
 
     # Filter out None values from locations list
     locations = [loc for loc in locations if loc is not None]
@@ -888,10 +887,9 @@ def chat_content():
                   amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     st.session_state['json'] = update_requires(update_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, user_input,amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     ask_user(ask_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, district_list, amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
-    response=st.session_state['json']
-    if st.button('in dia diem'):
-        st.session_state['response'] = response
-        print(response)
+
+    if user_input == 'None':
+        response=st.session_state['json']
         general_requirements = response.get("General", {})
         hotel_requirements = response.get("Hotel", {})
         restaurant_requirements = response.get("Restaurant", {})
@@ -912,10 +910,7 @@ def chat_content():
 
         st.session_state['locations'] = best_itinerary_relaxation
         print(best_itinerary_relaxation)
-        bot_response = st.session_state['response']
-    # Thêm phản hồi của bot vào list trong session_state
-        st.session_state['contents'].append({"role": "assistant", "content": bot_response})
-
+       
 # Khởi tạo `contents` và `locations` nếu chưa có
 if 'contents' not in st.session_state:
     st.session_state['contents'] = []
