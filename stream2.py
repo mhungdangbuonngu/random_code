@@ -18,7 +18,7 @@ import psycopg2
 # Khởi tạo `float_init`
 float_init(theme=True, include_unstable_primary=False)
 
-gemini_key = "AIzaSyBrSC3MjwkjHBqUVOULn2qShPM04BmcLls"
+gemini_key = "AIzaSyARgQ6Cw-IV0hBL0H0h_lTAXfbevFAytPc"
 
 @st.cache_resource
 def get_gemini(key):
@@ -493,6 +493,57 @@ update_prompt = ChatPromptTemplate.from_template(updated_query)
 update_chain = update_prompt | st.session_state.model
 #ham def lay json file
 
+end_query='''you are an AI travel assistance, your task is to analyze the user query: 
+Update request: "{update_travel_request}"
+if user said about dont want to give more infomation in vietnameses: for example:'khô
+ng tôi không muốn gì thêm', 'không', 'tôi không cần gì thêm', 'như vậy là đủ rồi',... 
+and the json file with the following format:
+ ```json
+{{
+  "General": {{
+    "Type": "...",
+    "Number_of_people": "...",
+    "Companion": "...",
+    "Transportation": "...",
+    "Time": "...",
+    "City": "...",
+    "District": "...",
+    "Price_range": "...",
+    "
+  }},
+  "Hotel": {{
+    "Requirements": ...,
+    "Amenities": [...],
+    "Style": [...]
+  }},
+  "Restaurant": {{
+    "Requirements": ...,
+    "Restaurant_Type": "...",
+    "Suitable_For": "..."
+  }},
+  "TouristAttraction": {{
+    "Attraction_Type": "..."
+  }}
+}}
+
+```
+if all the features in 'general' are filled in {travel_output_json} with the above format.
+update the {schedule} from 'false' to 'true' if {schedule} still in 'false'
+**note**:
+    your main task is to update the {schedule} from 'false' to 'true' so you dont need to do anything else but update it.
+  '''
+
+final_prompt=ChatPromptTemplate.from_template(end_query)
+final_chain=final_prompt | st.session_state.model
+
+def turn_on_schedule(final_chain, query, json, schedule):
+    response=final_chain.invoke({
+        'update_travel_request':query,
+        'travel_output_json':json,
+        'schedule':schedule
+    })
+    schedule=response.content
+    return schedule
 def user_requires(chain, query, travel_type_list, companion_list, transport_list, city_list, district_list, 
                   amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str):
     response = chain.invoke({
@@ -878,6 +929,8 @@ def genetic_algorithm_experience(hotels, tourist_attractions, restaurants, gener
 
 # Hàm xử lý nội dung chat
 def chat_content():
+    if 'schedule' not in st.session_state:
+        st.session_state['schedule']= False
     # Lưu tin nhắn người dùng vào session_state
     user_input = st.session_state.content
     # Thêm tin nhắn của người dùng vào list trong session_state
@@ -887,8 +940,8 @@ def chat_content():
                   amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     st.session_state['json'] = update_requires(update_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, user_input,amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     ask_user(ask_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, district_list, amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
-
-    if user_input == 'None':
+    st.session_state['schedule']=turn_on_schedule(user_input,st.session_state['json'],st.session_state['schedule'])
+    if (st.session_state['schedule'] == True):
         response=st.session_state['json']
         general_requirements = response.get("General", {})
         hotel_requirements = response.get("Hotel", {})
@@ -921,7 +974,7 @@ if 'locations' not in st.session_state:
 border = False
 
 # Chia bố cục thành 2 cột chiếm hết chiều ngang màn hình
-col1, col2, col3 = st.columns([1, 1, 1])  # Tỷ lệ 1:1, bạn có thể thay đổi tỷ lệ này tùy ý
+col1, col2 = st.columns([1, 1])  # Tỷ lệ 1:1, bạn có thể thay đổi tỷ lệ này tùy ý
 
 
 # Cột bên trái: Giao diện chat
@@ -1133,7 +1186,7 @@ with col2:
 #     user_requirements=update_requires_respond
 # )
 # print_itinerary_relaxation(best_itinerary_relaxation)
-with col3:
-    st.session_state['json']
+# with col3:
+#     st.session_state['json']
 
 
