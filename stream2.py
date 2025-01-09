@@ -963,7 +963,7 @@ with col1:
                     with st.chat_message(name="assistant"):
                         st.write(c.get("content", ""))
 
-# Cập nhật hàm in lộ trình để hiển thị thông tin lộ trình và vẽ đường đi
+#region Print_screen
 # Cập nhật hàm in lộ trình để hiển thị thông tin lộ trình và vẽ đường đi
 def print_itinerary_experience(itinerary):
     hotel = itinerary['hotel']
@@ -1093,7 +1093,7 @@ def print_itinerary_experience(itinerary):
             else:
                 duration = timedelta(hours=1)
 
-            total_time += travel_time + int(duration)
+            total_time += travel_time + duration
 
             # Tính giá
             if 'price' in place and isinstance(place['price'], dict):
@@ -1113,19 +1113,12 @@ def print_itinerary_experience(itinerary):
             - Giá: VND{price:,.0f}
             - Vị trí: {place['address']}
             """)
-            # st.write(f"  Khoảng cách: {distance_km:.2f} km")
-            # st.write(f"  Thời gian di chuyển: {travel_time_minutes} phút")
-            # st.write(f"Tại {place['name']}:")
-            # st.write(f"  Loại hình: {place.get('attraction_type', 'Nhà hàng')}")
-            # st.write(f"  Đánh giá: {place['rating']}")
-            # st.write(f"  Giá: VND{price}")
             if 'tour_duration' in place:
                 duration_hours = int(duration.total_seconds() / 3600)
                 duration_minutes = int((duration.total_seconds() % 3600) / 60)
                 st.markdown(f" -Thời gian ở lại: {duration_hours} giờ {duration_minutes} phút")
             else:
                 st.markdown(" -Thời gian ở lại: 1 giờ")
-            # st.write(f"  Vị trí: {place['location']['coordinates']}") ## need to fix
 
     total_hours = total_time.total_seconds() / 3600
     st.write(f"\n**Tổng thời gian (bao gồm di chuyển):** {total_hours:.2f} giờ")
@@ -1133,7 +1126,7 @@ def print_itinerary_experience(itinerary):
     st.write(f"**Tổng chi phí:** VND{total_price:.2f}")
 
 
-
+#endregion
 # Cột bên phải: Bản đồ và danh sách địa điểm
 with col2:
     with st.container(border=True):
