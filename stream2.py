@@ -18,7 +18,7 @@ import psycopg2
 # Khởi tạo `float_init`
 float_init(theme=True, include_unstable_primary=False)
 
-gemini_key = "AIzaSyARgQ6Cw-IV0hBL0H0h_lTAXfbevFAytPc"
+gemini_key = "AIzaSyBsSOZ5m1_JO_ayVSv2nWLOxJ4-jUqBUUw"
 
 @st.cache_resource
 def get_gemini(key):
@@ -94,24 +94,24 @@ res_type_list_str = [
     "Nhà hàng"
 ]
 res_suit_list_str = [
-    "Uống bia - Nhậu",
-    "Ăn gia đình",
-    "Ăn chay",
-    "Ăn Fastfood",
-    "Đãi tiệc",
-    "Tiếp khách",
-    "Takeaway - Mang về",
-    "Họp nhóm",
-    "Ăn vặt",
-    "Nghe nhạc",
-    "Du lịch",
-    "Ngắm cảnh",
-    "Chụp hình - Quay phim",
     "BBQ - Món Nướng",
-    "Tiệc ngoài trời",
-    "Thư giãn",
+    "Buffet",
+    "Chụp hình - Quay phim",
+    "Du lịch",
     "Hẹn hò",
-    "Buffet"
+    "Họp nhóm",
+    "Nghe nhạc",
+    "Ngắm cảnh",
+    "Takeaway - Mang về",
+    "Thư giãn",
+    "Tiếp khách",
+    "Tiệc ngoài trời",
+    "Uống bia - Nhậu",
+    "Ăn Fastfood",
+    "Ăn chay",
+    "Ăn gia đình",
+    "Ăn vặt",
+    "Đãi tiệc"
 ]
 att_type_list_str = [
     "Nhà hát và biểu diễn",
@@ -214,10 +214,10 @@ Extract general and specific requirements for Hotels, Restaurants, and Tourist A
 - Companions: Extract the companions mentioned in the request and translated it if it needed, must be one from this list: {companion_list} or return null if not specified.
 - Transportation: Identify the transportation method mentioned in the request and translated, convert it if it needed, transportation must be one from this list: {transport_list} or return null if not specified.
 - Time:
-  - Extract specific dates or time ranges mentioned in the request.
+  - Extract specific dates or time ranges mentioned in the request, you should return only number of days.
   - If no specific dates are mentioned, check for keywords like "ngày", "tuần", "tháng" and their corresponding numbers.
   - Return null if there's no date or time ranges in the request.
-  - For example, "3 ngày" should be extracted as "3 days".
+  - For example, "3 ngày" should be extracted as "3";" 3 ngày 2 đêm" become "3".
 - City: The mentioned city (without "city" or "province").
 - District: The mentioned district (without "district") and must be one frin this list: {district_list} or else return null.
 - Price_range: Specify as "low", "medium", or "high" based on the request.
@@ -233,12 +233,12 @@ Extract general and specific requirements for Hotels, Restaurants, and Tourist A
 
 **For Restaurants, also identify:**
 - Requirements: A summary text of specific requirements or preferences mentioned.
-- Restaurant_Type: From this list: {restaurant_type_list}
+- Restaurant_Type: From this list: {restaurant_type_list} (Do Not add other infomations that don't have in the list)
 - Suitable_For: From this list: {suitable_for_list}
 
 **For Tourist Attractions, also identify:**
 - Requirements: A list of specific requirements or preferences mentioned.
-- Attraction_Type: From this list: {attraction_type_list}
+- Attraction_Type: From this list: {attraction_type_list} (Do Not add other infomations that don't have in the list)
 
 Return the result using the following JSON format:
 
@@ -493,57 +493,32 @@ update_prompt = ChatPromptTemplate.from_template(updated_query)
 update_chain = update_prompt | st.session_state.model
 #ham def lay json file
 
-end_query='''you are an AI travel assistance, your task is to analyze the user query: 
-Update request: "{update_travel_request}"
-if user said about dont want to give more infomation in vietnameses: for example:'khô
-ng tôi không muốn gì thêm', 'không', 'tôi không cần gì thêm', 'như vậy là đủ rồi',... 
-and the json file with the following format:
- ```json
-{{
-  "General": {{
-    "Type": "...",
-    "Number_of_people": "...",
-    "Companion": "...",
-    "Transportation": "...",
-    "Time": "...",
-    "City": "...",
-    "District": "...",
-    "Price_range": "...",
-    "
-  }},
-  "Hotel": {{
-    "Requirements": ...,
-    "Amenities": [...],
-    "Style": [...]
-  }},
-  "Restaurant": {{
-    "Requirements": ...,
-    "Restaurant_Type": "...",
-    "Suitable_For": "..."
-  }},
-  "TouristAttraction": {{
-    "Attraction_Type": "..."
-  }}
-}}
+end_query = """
+You are an AI travel assistant. Your task is to analyze the user query and determine if the user explicitly indicates they do not want to provide further information. 
 
-```
-if all the features in 'general' are filled in {travel_output_json} with the above format.
-update the {schedule} from 'false' to 'true' if {schedule} still in 'false'
-**note**:
-    your main task is to update the {schedule} from 'false' to 'true' so you dont need to do anything else but update it.
-  '''
+Consider these examples:
+* "không tôi không muốn gì thêm" - True
+* "tôi không cần gì thêm" - True
+* "như vậy là đủ rồi" - True
+* "tôi muốn thêm thông tin về khách sạn" - False
+* "tôi chưa quyết định" - False
+
+Update request: "{update_travel_request}" 
+
+Return "True" or "False" only. Do not provide any additional explanations.
+"""
 
 final_prompt=ChatPromptTemplate.from_template(end_query)
-final_chain=final_prompt | st.session_state.model
-
-def turn_on_schedule(final_chain, query, json, schedule):
+final_chain= final_prompt | st.session_state.model
+#region llm_function
+def turn_on_schedule(final_chain, query):
     response=final_chain.invoke({
         'update_travel_request':query,
-        'travel_output_json':json,
-        'schedule':schedule
+        # 'travel_output_json':json     
     })
-    schedule=response.content
-    return schedule
+    if "true" in response.content.lower():
+        st.session_state['schedule'] = True
+    return st.session_state['schedule']
 def user_requires(chain, query, travel_type_list, companion_list, transport_list, city_list, district_list, 
                   amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str):
     response = chain.invoke({
@@ -660,10 +635,8 @@ def update_requires(update_chain, first_respond, travel_type_list, companion_lis
         # print("Failed to decode JSON:", e)
         # print("Raw response:", response.content)
         return None
-
-template3='''
-
-'''
+#endregion
+#region genetic_algorithm
 def parse_tour_duration(duration_str):
     # Parse the duration string in 'HH:MM:SS' format
     time_parts = list(map(int, duration_str.split(':')))
@@ -689,7 +662,7 @@ def haversine(coord1, coord2):
 def calculate_total_time(itinerary):
     hotel = itinerary['hotel']
     places = itinerary['places']
-    speed_kmh = 40
+    speed_kmh = 30
     total_time = timedelta()
     locations = []
 
@@ -926,11 +899,11 @@ def genetic_algorithm_experience(hotels, tourist_attractions, restaurants, gener
     best_itinerary = population[0]
     best_fitness = compute_itinerary_fitness_experience(best_itinerary)
     return best_itinerary, best_fitness
-
+#endregion
+#region chat_function
 # Hàm xử lý nội dung chat
 def chat_content():
-    if 'schedule' not in st.session_state:
-        st.session_state['schedule']= False
+   
     # Lưu tin nhắn người dùng vào session_state
     user_input = st.session_state.content
     # Thêm tin nhắn của người dùng vào list trong session_state
@@ -940,7 +913,7 @@ def chat_content():
                   amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     st.session_state['json'] = update_requires(update_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, user_input,amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
     ask_user(ask_chain, st.session_state['json'], travel_type_list, companion_list, transport_list, city_list, district_list, amenities_list_str, style_list_str, res_type_list_str, res_suit_list_str, att_type_list_str)
-    st.session_state['schedule']=turn_on_schedule(user_input,st.session_state['json'],st.session_state['schedule'])
+    st.session_state['schedule']=turn_on_schedule(final_chain,user_input)
     if (st.session_state['schedule'] == True):
         response=st.session_state['json']
         general_requirements = response.get("General", {})
@@ -963,18 +936,19 @@ def chat_content():
 
         st.session_state['locations'] = best_itinerary_relaxation
         print(best_itinerary_relaxation)
-       
+#endregion
 # Khởi tạo `contents` và `locations` nếu chưa có
 if 'contents' not in st.session_state:
     st.session_state['contents'] = []
     st.session_state['json'] = None
+    st.session_state['schedule']= False
 if 'locations' not in st.session_state:
     st.session_state['locations'] = False  # Khởi tạo với lộ trình trống
 
 border = False
 
 # Chia bố cục thành 2 cột chiếm hết chiều ngang màn hình
-col1, col2 = st.columns([1, 1])  # Tỷ lệ 1:1, bạn có thể thay đổi tỷ lệ này tùy ý
+col1, col2,col3  = st.columns([1, 1,1])  # Tỷ lệ 1:1, bạn có thể thay đổi tỷ lệ này tùy ý
 
 
 # Cột bên trái: Giao diện chat
@@ -1053,7 +1027,7 @@ def print_itinerary_experience(itinerary):
                 distance_meters = haversine([lat1, lon1], [lat2, lon2])
                 distance_km = distance_meters / 1000
                 total_distance += distance_km
-                travel_time_hours = distance_km / 40  # Tốc độ 40 km/h
+                travel_time_hours = distance_km / 30  # Tốc độ 30 km/h
                 travel_time = timedelta(hours=travel_time_hours)
                 travel_time_minutes = int(travel_time.total_seconds() / 60)
 
@@ -1130,7 +1104,7 @@ def print_itinerary_experience(itinerary):
             else:
                 duration = timedelta(hours=1)
 
-            total_time += travel_time + duration
+            total_time += travel_time + int(duration)
 
             # Tính giá
             if 'price' in place and isinstance(place['price'], dict):
@@ -1141,20 +1115,28 @@ def print_itinerary_experience(itinerary):
             total_price += price
 
             # In thông tin địa điểm
-            st.write(f"\n**Di chuyển đến {place['name']}:**")
-            st.write(f"  Khoảng cách: {distance_km:.2f} km")
-            st.write(f"  Thời gian di chuyển: {travel_time_minutes} phút")
-            st.write(f"Tại {place['name']}:")
-            st.write(f"  Loại hình: {place.get('attraction_type', 'Nhà hàng')}")
-            st.write(f"  Đánh giá: {place['rating']}")
-            st.write(f"  Giá: VND{price}")
+            st.write(f"\n**{i}: {place['name']}**")
+            st.markdown(f"""
+            - Khoảng cách: {distance_km:.2f} km
+            - Thời gian di chuyển: {travel_time_minutes} phút
+            - Loại hình: {place.get('attraction_type', 'Nhà hàng')}
+            - Đánh giá: {place['rating']}
+            - Giá: VND{price:,.0f}
+            - Vị trí: {place['address']}
+            """)
+            # st.write(f"  Khoảng cách: {distance_km:.2f} km")
+            # st.write(f"  Thời gian di chuyển: {travel_time_minutes} phút")
+            # st.write(f"Tại {place['name']}:")
+            # st.write(f"  Loại hình: {place.get('attraction_type', 'Nhà hàng')}")
+            # st.write(f"  Đánh giá: {place['rating']}")
+            # st.write(f"  Giá: VND{price}")
             if 'tour_duration' in place:
                 duration_hours = int(duration.total_seconds() / 3600)
                 duration_minutes = int((duration.total_seconds() % 3600) / 60)
-                st.write(f"  Thời gian ở lại: {duration_hours} giờ {duration_minutes} phút")
+                st.markdown(f" -Thời gian ở lại: {duration_hours} giờ {duration_minutes} phút")
             else:
-                st.write("  Thời gian ở lại: 1 giờ")
-            st.write(f"  Vị trí: {place['location']['coordinates']}")
+                st.markdown(" -Thời gian ở lại: 1 giờ")
+            # st.write(f"  Vị trí: {place['location']['coordinates']}") ## need to fix
 
     total_hours = total_time.total_seconds() / 3600
     st.write(f"\n**Tổng thời gian (bao gồm di chuyển):** {total_hours:.2f} giờ")
@@ -1186,7 +1168,7 @@ with col2:
 #     user_requirements=update_requires_respond
 # )
 # print_itinerary_relaxation(best_itinerary_relaxation)
-# with col3:
-#     st.session_state['json']
-
+with col3:
+    st.session_state['json']
+    st.session_state['schedule']
 
