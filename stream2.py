@@ -229,7 +229,7 @@ Extract general and specific requirements for Hotels, Restaurants, and Tourist A
   - If request says "need hotel with pool and gym" → include ["Pool", "Gym"]
   - If request doesn't mention any amenities → return null
   - Do NOT assume or add amenities that weren't specifically mentioned
-- Style: Only include styles from this list if explicitly mentioned in the request: {style_list} or else return null
+- Style: Only include ONE style from this list if explicitly mentioned in the request: {style_list} or else return null
 
 **For Restaurants, also identify:**
 - Requirements: A summary text of specific requirements or preferences mentioned.
@@ -431,7 +431,7 @@ Extract general requirements from request while following these rules:
   - If request says "need hotel with pool and gym" → include ["Pool", "Gym"]
   - If request doesn't mention any amenities → return null
   - Do NOT assume or add amenities that weren't specifically mentioned
-- Style: Only include styles from this list if explicitly mentioned in the request: {style_list} or else return null
+- Style: Only include ONE style from this list if explicitly mentioned in the request: {style_list} or else return null.
 
 **For Restaurants, also identify:**
 - Requirements: A summary text of specific requirements or preferences mentioned.
@@ -807,22 +807,13 @@ def compute_itinerary_fitness_experience(itinerary):
 
 # --- Hàm Tạo Quần Thể Ban Đầu ---
 
-def generate_initial_population_experience(hotels, tourist_attractions, restaurants, pop_size, user_requirements):
+def generate_initial_population_experience(hotels, tourist_attractions, restaurants, pop_size):
     population = []
     # Lọc điểm tham quan theo yêu cầu
-    filtered_attractions = [
-    attr for attr in tourist_attractions
-    if any(attraction in user_requirements.get('TouristAttraction', {}).get('Attraction_Type', [])
-           for attraction in attr.get('attraction_type', []))
-    ]
-    if not filtered_attractions:
-        filtered_attractions = tourist_attractions
+    filtered_attractions = tourist_attractions
 
     # Lọc nhà hàng theo yêu cầu
-    filtered_restaurants = [res for res in restaurants if
-                            set(user_requirements.get('Restaurant',{}).get('Suitable_For', [])).intersection(res.get('suitable_for', []))]
-    if not filtered_restaurants:
-        filtered_restaurants = restaurants
+    filtered_restaurants = restaurants
 
     for _ in range(pop_size):
         itinerary = {}
@@ -872,10 +863,8 @@ def mutate_itinerary(hotels, tourist_attractions, restaurants,itinerary):
     if random.random() < 0.05:
         itinerary['hotel'] = random.choice(hotels)
 
-def genetic_algorithm_experience(hotels, tourist_attractions, restaurants, generations=50, population_size=20, user_requirements=None):
-    if user_requirements is None:
-        user_requirements = {}
-    population = generate_initial_population_experience(hotels, tourist_attractions, restaurants, population_size, user_requirements)
+def genetic_algorithm_experience(hotels, tourist_attractions, restaurants, generations=50, population_size=20):
+    population = generate_initial_population_experience(hotels, tourist_attractions, restaurants, population_size)
 
     for generation in range(generations):
         fitness_scores = []
@@ -932,7 +921,7 @@ def chat_content():
         attraction_locations = query_data.fetch_locations(attraction_query_indi, postgres_url)
     #travel_type = response.get('General',{}).get('Type', None)
 
-        best_itinerary_relaxation, best_fitness_relaxation = genetic_algorithm_experience(user_requirements = response, hotels = hotel_locations, tourist_attractions = attraction_locations, restaurants = restaurant_locations)
+        best_itinerary_relaxation, best_fitness_relaxation = genetic_algorithm_experience(hotels = hotel_locations, tourist_attractions = attraction_locations, restaurants = restaurant_locations)
 
         st.session_state['locations'] = best_itinerary_relaxation
         print(best_itinerary_relaxation)
