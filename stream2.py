@@ -214,10 +214,10 @@ Extract general and specific requirements for Hotels, Restaurants, and Tourist A
 - Companions: Extract the companions mentioned in the request and translated it if it needed, must be one from this list: {companion_list} or return null if not specified.
 - Transportation: Identify the transportation method mentioned in the request and translated, convert it if it needed, transportation must be one from this list: {transport_list} or return null if not specified.
 - Time:
-  - Extract specific dates or time ranges mentioned in the request, you should return only number of days.
+  - Extract specific dates or time ranges mentioned in the request, you should return ONLY A NUMBER.
   - If no specific dates are mentioned, check for keywords like "ngày", "tuần", "tháng" and their corresponding numbers.
   - Return null if there's no date or time ranges in the request.
-  - For example, "3 ngày" should be extracted as "3";" 3 ngày 2 đêm" become "3".
+  - For example, "3 ngày" should be extracted as "3"; or "3 ngày 2 đêm" become "3", 'khoảng 4 ngày' become '4' DO NOT add any words into this value.
 - City: The mentioned city (without "city" or "province").
 - District: The mentioned district (without "district") and must be one frin this list: {district_list} or else return null.
 - Price_range: Specify as "low", "medium", or "high" based on the request.
@@ -420,7 +420,7 @@ Extract general requirements from request while following these rules:
 - Number_of_people: Extract the number of people.
 - Companions: Extract the companions mentioned in the request and translated it if it needed, must be one from this list: {companion_list}.
 - Transportation: Identify the transportation method mentioned in the request and translated, convert it if it needed, transportation must be one from this list: {transport_list}.
-- Time: Any specific dates or time ranges mentioned.
+- Time: A NUMBER that specified about the time traveling.
 - City: The mentioned city (without "city" or "province") and must be one from this list: {city_list}.
 - Price_range: Specify as "low", "medium", or "high" based on the request.
 
@@ -659,56 +659,51 @@ def haversine(coord1, coord2):
     return meters
 
 # Hàm tính tổng thời gian của lộ trình
-def calculate_total_time(itinerary):
+def calculate_total_time(itinerary, days):
     hotel = itinerary['hotel']
-    places = itinerary['places']
+    daily_itineraries = itinerary['days']
     speed_kmh = 30
     total_time = timedelta()
-    locations = []
 
-    # Kiểm tra hotel['location'] trước khi thêm vào danh sách locations
-    if hotel.get('location') and hotel['location'].get('coordinates'):
-        locations.append(hotel['location']['coordinates'])
+    for day_itinerary in daily_itineraries:
+        locations = []
 
-    # Kiểm tra từng địa điểm (place) và thêm vào locations nếu có thông tin hợp lệ
-    for place in places:
-        if place.get('location') and place['location'].get('coordinates'):
-            locations.append(place['location']['coordinates'])
+        # Add hotel location to the locations list
+        if hotel.get('location') and hotel['location'].get('coordinates'):
+            locations.append(hotel['location']['coordinates'])
 
-    # Đảm bảo rằng locations không bị rỗng hoặc có giá trị None
-    if not locations:
-        st.write("Không có tọa độ hợp lệ để tính toán lộ trình.")
-    else:
-        # Tiến hành các bước tiếp theo, ví dụ: vẽ bản đồ, tính toán thời gian, v.v.
-        pass
+        # Add valid place coordinates from the current day's itinerary
+        for place in day_itinerary:
+            if place.get('location') and place['location'].get('coordinates'):
+                locations.append(place['location']['coordinates'])
 
-    for i in range(len(locations) - 1):
-        # Kiểm tra tọa độ hợp lệ trước khi tính toán
-        lat1, lon1 = locations[i]
-        lat2, lon2 = locations[i + 1]
+        # Ensure locations list is not empty
+        if not locations:
+            print("No valid coordinates available to calculate the route.")
+            continue
 
-        if lat1 is not None and lon1 is not None and lat2 is not None and lon2 is not None:
-            # Thời gian di chuyển
-            distance_meters = haversine([lat1, lon1], [lat2, lon2])
-            distance_km = distance_meters  # Khoảng cách tính bằng km
-            travel_time_hours = distance_km / speed_kmh  # Tính thời gian di chuyển
-            travel_time = timedelta(hours=travel_time_hours)
-            total_time += travel_time
+        # Calculate travel times between consecutive locations
+        for i in range(len(locations) - 1):
+            lat1, lon1 = locations[i]
+            lat2, lon2 = locations[i + 1]
 
-            # Thời gian ở địa điểm
-            place = places[i]
+            if lat1 is not None and lon1 is not None and lat2 is not None and lon2 is not None:
+                # Calculate travel time based on distance
+                distance_meters = haversine([lat1, lon1], [lat2, lon2])
+                distance_km = distance_meters / 1000  # Convert meters to kilometers
+                travel_time_hours = distance_km / speed_kmh
+                travel_time = timedelta(hours=travel_time_hours)
+                total_time += travel_time
+
+        # Add time spent at each place in the current day's itinerary
+        for place in day_itinerary:
             if 'tour_duration' in place:
-                # Nếu có thời gian du lịch tại địa điểm, cộng vào tổng thời gian
                 total_time += parse_tour_duration(place['tour_duration'])
             else:
-                # Nếu không có, giả sử là 1 giờ
-                total_time += timedelta(hours=1)
-
-        else:
-            st.write(f"**Lỗi tọa độ không hợp lệ tại địa điểm {places[i]['name']} và {places[i+1]['name']}:**")
-            st.write(f"  {lat1}, {lon1} và {lat2}, {lon2}")
+                total_time += timedelta(hours=1)  # Default to 1 hour if no duration is provided
 
     return total_time
+
 
 # --- Hàm Tính Fitness ---
 def parse_location(location):
@@ -725,53 +720,45 @@ def parse_location(location):
     else:
         raise ValueError(f"Unexpected location format: {location}")
 
+
+# --- Hàm Tính Fitness ---
+
+
 def compute_itinerary_fitness_experience(itinerary):
     hotel = itinerary['hotel']
-    places = itinerary['places']
-
-    # Helper function to parse locations
-
-    # Parse places locations
-    try:
-        places_locations = [parse_location(place['location']) for place in places]
-    except ValueError as e:
-        print("Error parsing a place location:", e)
-        return None
+    days = itinerary['days']
 
     # Calculate places score
-    total_places_rating = sum(place.get('rating', 0) for place in places) * 20
-    places_score = total_places_rating + len(places) * 40
+    total_places_rating = sum(
+        place.get('rating', 0) * 20 for day in days for place in day
+    )
+    places_score = total_places_rating + sum(len(day) * 40 for day in days)
 
-    # Tính tổng khoảng cách di chuyển
+    # Calculate total distance and time
     total_distance = 0
-    locations = []
+    total_time = timedelta()
 
-    # Check if hotel has location and coordinates
-    if hotel.get('location') and hotel['location'].get('coordinates'):
-        locations.append(hotel['location']['coordinates'])
-    else:
-        locations.append(None)  # Add None if hotel location is missing
+    for day in days:
+        locations = []
 
-    # Add places' locations if they exist
-    locations.extend(places_locations)  # Add None if place location is missing
+        if hotel.get('location') and hotel['location'].get('coordinates'):
+            locations.append(hotel['location']['coordinates'])
 
-    # Filter out None values from locations list
-    locations = [loc for loc in locations if loc is not None]
+        locations.extend([place['location']['coordinates'] for place in day if place.get('location')])
 
-    # If there are no valid locations, return 0 fitness (or handle accordingly)
-    if not locations:
-        return 0  # or some other default value if no valid locations are found
+        for i in range(len(locations) - 1):
+            distance_meters = haversine(locations[i], locations[i + 1])
+            total_distance += distance_meters / 1000  # Convert to kilometers
 
-    # Calculate the total distance for valid locations
-    for i in range(len(locations) - 1):
-        distance_meters = haversine(locations[i], locations[i + 1])
-        total_distance += distance_meters / 1000  # Convert to kilometers
+        for place in day:
+            if 'tour_duration' in place:
+                total_time += parse_tour_duration(place['tour_duration'])
+            else:
+                total_time += timedelta(hours=1)  # Assume 1 hour if duration is missing
 
-    distance_penalty = total_distance * 50  # Ưu tiên sau thời gian
-    # Calculate time penalty
-    total_time = calculate_total_time(itinerary)
+    distance_penalty = total_distance * 50  # Priority after time
     total_hours = total_time.total_seconds() / 3600
-    time_penalty = (total_hours - 14) * 20 if total_hours > 14 else 0
+    time_penalty = (total_hours - 14 * len(days)) * 20 if total_hours > 14 * len(days) else 0
 
     # Calculate average prices
     hotel_avg_price = (
@@ -784,15 +771,15 @@ def compute_itinerary_fitness_experience(itinerary):
         sum(place.get('price', {}).values()) / len(place['price'].values())
         if 'price' in place and place['price']
         else 0
-        for place in places
+        for day in days for place in day
     )
 
     restaurant_avg_price = sum(
-        place.get('average_price_per_person', 0) for place in places
+        place.get('average_price_per_person', 0) for day in days for place in day
     )
 
     total_price = hotel_avg_price + attraction_avg_price + restaurant_avg_price - distance_penalty
-    price_penalty = total_price * 0.1  # Moderate importance to pricing
+    price_penalty = total_price * 0.1
 
     # Compute final fitness score
     fitness = (
@@ -807,25 +794,31 @@ def compute_itinerary_fitness_experience(itinerary):
 
 # --- Hàm Tạo Quần Thể Ban Đầu ---
 
-def generate_initial_population_experience(hotels, tourist_attractions, restaurants, pop_size):
+def generate_initial_population_experience(hotels, tourist_attractions, restaurants, pop_size, days):
     population = []
     # Lọc điểm tham quan theo yêu cầu
     filtered_attractions = tourist_attractions
 
     # Lọc nhà hàng theo yêu cầu
     filtered_restaurants = restaurants
-
+    all_places = filtered_attractions + filtered_restaurants
     for _ in range(pop_size):
         itinerary = {}
         # Chọn khách sạn ngẫu nhiên
         itinerary['hotel'] = random.choice(hotels)
-        # Chọn nhiều điểm tham quan
-        num_places = random.randint(5, 8)
-        all_places = filtered_attractions + filtered_restaurants
-        if len(all_places) >= num_places:
-            itinerary['places'] = random.sample(all_places, num_places)
-        else:
-            itinerary['places'] = all_places
+        daily_itinerary=[]
+        visited_places = set()
+        for day in range(days):
+            available_places = [place for place in all_places if place['name'] not in visited_places]
+            num_places = random.randint(5, 8)
+            if available_places and len(available_places) >= num_places:
+                day_places = random.sample(available_places,num_places)
+                daily_itinerary.append(day_places)
+                #add to set
+                visited_places.update([place['name'] for place in day_places])
+            else:
+                daily_itinerary.append(available_places)
+        itinerary['days'] = daily_itinerary
         population.append(itinerary)
     return population
 
@@ -834,55 +827,96 @@ def generate_initial_population_experience(hotels, tourist_attractions, restaura
 def crossover_itineraries(parent1, parent2):
     child = {}
     child['hotel'] = random.choice([parent1['hotel'], parent2['hotel']])
-    places1 = parent1['places']
-    places2 = parent2['places']
-    min_len = min(len(places1), len(places2))
+    #từng ngày
+    days1=parent1['days']
+    days2=parent2['days']
+    max_days=max(len(days1),len(days2))
 
-    if min_len > 1:
-        cut_point = random.randint(1, min_len - 1)
-        child_places = places1[:cut_point] + places2[cut_point:]
-    else:
-        child_places = places1 + places2
+    child_days=[]
+    for day in range(max_days):
+        if day < len(days1) and day < len(days2):
+            day_places1=days1[day]
+            day_places2=days2[day]
+            min_len=min(len(day_places1),len(day_places2))
+            
+            if min_len >1:
+                cut_point=random.randint(1,min_len-1)
+                child_day_places=day_places1[:cut_point] + day_places2[cut_point:]
+            else:
+                child_day_places= day_places1 + day_places2
+            
 
-    # Loại bỏ trùng lặp
-    seen = set()
-    unique_places = []
-    for place in child_places:
-        if place['name'] not in seen:
-            unique_places.append(place)
-            seen.add(place['name'])
-    child['places'] = unique_places
+            seen_name=set()
+            unique_day_places=[]
+            for place in child_day_places:
+                if place['name'] not in seen_name:
+                    unique_day_places.append(place)
+                    seen_name.add(place['name'])
+                
+            child_days.append(unique_day_places)
+        elif day <len(days1):
+            child_days.append(days1[day])
+        elif day <len(days2):
+            child_days.append(days2[day])
+    child['days']=child_days
     return child
 
 def mutate_itinerary(hotels, tourist_attractions, restaurants,itinerary):
-    if random.random() < 0.1:
-        if len(itinerary['places']) > 0:
-            index = random.randint(0, len(itinerary['places'])-1)
-            new_place = random.choice(tourist_attractions + restaurants)
-            itinerary['places'][index] = new_place
-    if random.random() < 0.05:
+    all_places = tourist_attractions + restaurants
+    visited_places = set(place['name'] for day in itinerary['days'] for place in day)
+    if random.random() < 0.05:  # Xác suất đột biến khách sạn (5%)
         itinerary['hotel'] = random.choice(hotels)
+    for day in itinerary['days']:    
+        if random.random() < 0.1:
+            if day:
+                index = random.randint(0, len(day) - 1)
+                available_places = [place for place in all_places if place['name'] not in visited_places]
+                if available_places:
+                    new_place=random.choice(available_places)
+                    visited_places.remove(day[index]['name'])
+                    day[index]=new_place
+                    visited_places.add(day[index]['name'])
+                
+            if random.random() < 0.1:
+                available_places = [place for place in all_places if place['name'] not in visited_places]
+                if available_places:
+                    new_place=random.choice(available_places)
+                    day.append(new_place)
+                    visited_places.add(new_place['name'])
 
-def genetic_algorithm_experience(hotels, tourist_attractions, restaurants, generations=50, population_size=20):
-    population = generate_initial_population_experience(hotels, tourist_attractions, restaurants, population_size)
+        if random.random() < 0.05:
+            index=random.randint(0,len(day)-1)
+            visited_places.remove(day[index]['name'])
+            del day[index]
+    return itinerary
+
+def genetic_algorithm_experience(
+    hotels, tourist_attractions, restaurants, days, generations=50, population_size=20
+):
+    population = generate_initial_population_experience(
+        hotels, tourist_attractions, restaurants, population_size, days
+    )
 
     for generation in range(generations):
         fitness_scores = []
         for itinerary in population:
             fitness = compute_itinerary_fitness_experience(itinerary)
             fitness_scores.append((fitness, itinerary))
+
         fitness_scores.sort(reverse=True, key=lambda x: x[0])
         population = [it for (fit, it) in fitness_scores]
 
         num_selected = population_size // 2
         selected = population[:num_selected]
         offspring = []
+
         while len(offspring) < population_size - num_selected:
             parent1 = random.choice(selected)
             parent2 = random.choice(selected)
             child = crossover_itineraries(parent1, parent2)
-            mutate_itinerary(hotels, tourist_attractions, restaurants,child)
+            mutate_itinerary(hotels, tourist_attractions, restaurants, child)
             offspring.append(child)
+
         population = selected + offspring
 
     best_itinerary = population[0]
@@ -909,7 +943,7 @@ def chat_content():
         hotel_requirements = response.get("Hotel", {})
         restaurant_requirements = response.get("Restaurant", {})
         attraction_requirements = response.get("TouristAttraction", {})
-    
+        days=response['General']['Time']
         hotel_query_indi = query_data.build_sql_query_individual("hotel", hotel_requirements, general_requirements)
 
         restaurant_query_indi = query_data.build_sql_query_individual("restaurant", restaurant_requirements, general_requirements)
@@ -921,7 +955,7 @@ def chat_content():
         attraction_locations = query_data.fetch_locations(attraction_query_indi, postgres_url)
     #travel_type = response.get('General',{}).get('Type', None)
 
-        best_itinerary_relaxation, best_fitness_relaxation = genetic_algorithm_experience(hotels = hotel_locations, tourist_attractions = attraction_locations, restaurants = restaurant_locations)
+        best_itinerary_relaxation, best_fitness_relaxation = genetic_algorithm_experience(hotels = hotel_locations, tourist_attractions = attraction_locations, restaurants = restaurant_locations,days=days)
 
         st.session_state['locations'] = best_itinerary_relaxation
         print(best_itinerary_relaxation)
@@ -972,142 +1006,87 @@ def print_itinerary_experience(itinerary):
     else:
         hotel_avg_price = hotel['price']
     
-    # Danh sách tọa độ (đã đảo ngược tọa độ)
-    locations = []
-    
-    # Kiểm tra nếu khách sạn có tọa độ hợp lệ
-    if hotel.get('location') and hotel['location'].get('coordinates'):
-        locations.append(hotel['location']['coordinates'])
-    
-    # Kiểm tra nếu các địa điểm trong lộ trình có tọa độ hợp lệ
-    for place in itinerary.get('places', []):
-        if place.get('location') and place['location'].get('coordinates'):
-            locations.append(place['location']['coordinates'])
-    
+    # Initialize total variables
     total_time = timedelta()
     total_distance = 0
     total_price = hotel_avg_price
 
-    # Khởi tạo bản đồ với vị trí trung tâm là khách sạn
-    if hotel.get('location') and hotel['location'].get('coordinates'):
-        map_center = [hotel['location']['coordinates'][1], hotel['location']['coordinates'][0]]  # Đảo ngược tọa độ
-    else:
-        map_center = [0, 0]  # Vị trí mặc định nếu không có tọa độ hợp lệ
-    map_object = folium.Map(location=map_center, zoom_start=14)
+    # Generate a separate map for each day or one combined map
+    combined_map = folium.Map(
+        location=[
+            hotel['location']['coordinates'][1],
+            hotel['location']['coordinates'][0]
+        ],
+        zoom_start=14
+    )
     
-    # Thêm khách sạn vào bản đồ
-    if hotel.get('location') and hotel['location'].get('coordinates'):
+    # Process each day's itinerary
+    for day_index, day_itinerary in enumerate(itinerary['days'], start=1):
+        print(f"\nNgày {day_index}:")
+        st.write(f"\n### Ngày {day_index}:")
+        
+        # Add the hotel location as the starting point
+        locations = [hotel['location']['coordinates']] + [
+            place['location']['coordinates'] for place in day_itinerary
+        ]
+        
+        day_map = folium.Map(
+            location=[
+                hotel['location']['coordinates'][1],
+                hotel['location']['coordinates'][0]
+            ],
+            zoom_start=14
+        )
+
+        # Add hotel marker
         folium.Marker(
-            location=[hotel['location']['coordinates'][1], hotel['location']['coordinates'][0]],  # Đảo ngược tọa độ
+            location=[hotel['location']['coordinates'][1], hotel['location']['coordinates'][0]],
             popup=f"Khách sạn: {hotel['name']}",
-            icon=folium.Icon(color='blue')  # Màu xanh dương cho khách sạn
-        ).add_to(map_object)
+            icon=folium.Icon(color='blue')
+        ).add_to(day_map)
 
-    # Khởi tạo màu sắc cho các đoạn đường
-    route_colors = ["blue", "green", "red", "purple", "orange", "pink", "brown", "gray", "lightblue"]
-
-    for i, place in enumerate(itinerary['places']):
-        if i < len(locations) - 1:  # Đảm bảo không vượt quá chỉ số
+        for i, place in enumerate(day_itinerary):
             lat1, lon1 = locations[i]
-            lat2, lon2 = locations[i+1] if i+1 < len(locations) else (None, None)
-
-            # Tính thời gian di chuyển và khoảng cách giữa khách sạn và các địa điểm
+            lat2, lon2 = locations[i + 1] if i + 1 < len(locations) else (None, None)
+            
+            # Calculate travel time and distance
             if lat1 is not None and lon1 is not None and lat2 is not None and lon2 is not None:
                 distance_meters = haversine([lat1, lon1], [lat2, lon2])
                 distance_km = distance_meters / 1000
                 total_distance += distance_km
-                travel_time_hours = distance_km / 30  # Tốc độ 30 km/h
+                travel_time_hours = distance_km / 20  # Speed: 20 km/h
                 travel_time = timedelta(hours=travel_time_hours)
-                travel_time_minutes = int(travel_time.total_seconds() / 60)
+                total_time += travel_time
 
-                # Thời gian ở địa điểm
-                if 'tour_duration' in place:
-                    duration = parse_tour_duration(place['tour_duration'])
-                else:
-                    duration = timedelta(hours=1)
-
-                total_time += travel_time + duration
-
-                # Tính giá
-                if 'price' in place and isinstance(place['price'], dict):
-                    price = sum(place['price'].values()) / len(place['price'].values())
-                else:
-                    price = place.get('average_price_per_person', 0)
-                
-                total_price += price
-
-                # Thêm marker cho địa điểm
-                if place.get('location') and place['location'].get('coordinates'):
-                    folium.Marker(
-                        location=[place['location']['coordinates'][1], place['location']['coordinates'][0]],  # Đảo ngược tọa độ
-                        popup=f"{place['name']} - {place['description']}",
-                        icon=folium.Icon(color='red')  # Màu đỏ cho các địa điểm khác
-                    ).add_to(map_object)
-    
-    # Vẽ đường đi giữa các điểm trong lộ trình (bao gồm khách sạn)
-    for i in range(len(locations) - 1):
-        lat_A = locations[i][1]
-        lon_A = locations[i][0]
-        lat_B = locations[i+1][1]
-        lon_B = locations[i+1][0]
-
-        # Gọi API OSRM để tính toán đường đi
-        osrm_url = f"http://router.project-osrm.org/route/v1/driving/{lon_A},{lat_A};{lon_B},{lat_B}?overview=full&geometries=geojson"
-        response = requests.get(osrm_url)
-        data = response.json()
-
-        if 'routes' in data:
-            route = data['routes'][0]['geometry']['coordinates']
-            route_latlon = [[coord[1], coord[0]] for coord in route]  # Đảo ngược tọa độ
-
-            # Tính màu nhạt dần và độ mờ
-            color_intensity = 255 - int((i / (len(locations) - 1)) * 255)
-            color_hex = f"#{color_intensity:02x}{color_intensity:02x}ff"  # Từ xanh dương chuyển dần sang trắng
-            opacity = 0.8 - (i / (len(locations) - 1)) * 0.5  # Độ mờ giảm dần từ 0.8 đến 0.3
-
-            # Thêm đường đi vào bản đồ với màu sắc và độ nhạt dần
-            folium.PolyLine(route_latlon, color=color_hex, weight=5, opacity=opacity).add_to(map_object)
-
-    # Hiển thị bản đồ
-    st_data = st_folium(map_object, width=700, height=500)
-    # Sử dụng st.write để thay thế print
-    st.write("\n**Lộ trình Khám Phá Tối Ưu:**")
-    st.write(f"**Khách sạn:** {hotel['name']} - Đánh giá: {hotel['rating']}")
-    st.write(f"**Giá mỗi đêm:** VND{hotel_avg_price}")
-    for i, place in enumerate(itinerary['places']):
-        lat1, lon1 = locations[i]
-        lat2, lon2 = locations[i+1] if i+1 < len(locations) else (None, None)
-
-        # Tính thời gian di chuyển và khoảng cách giữa khách sạn và các địa điểm
-        if lat1 is not None and lon1 is not None and lat2 is not None and lon2 is not None:
-            distance_meters = haversine([lat1, lon1], [lat2, lon2])
-            distance_km = distance_meters / 1000
-            total_distance += distance_km
-            travel_time_hours = distance_km / 40  # Tốc độ 40 km/h
-            travel_time = timedelta(hours=travel_time_hours)
-            travel_time_minutes = int(travel_time.total_seconds() / 60)
-
-            # Thời gian ở địa điểm
+            # Calculate time at the location
             if 'tour_duration' in place:
                 duration = parse_tour_duration(place['tour_duration'])
             else:
                 duration = timedelta(hours=1)
+            total_time += duration
 
-            total_time += travel_time + duration
-
-            # Tính giá
+            # Calculate price
             if 'price' in place and isinstance(place['price'], dict):
                 price = sum(place['price'].values()) / len(place['price'].values())
             else:
                 price = place.get('average_price_per_person', 0)
-            
             total_price += price
 
-            # In thông tin địa điểm
-            st.write(f"\n**{i}: {place['name']}**")
+            # Determine marker color based on type
+            marker_color = 'red' if place.get('attraction_type') == 'Attraction' else 'green'
+
+            # Add markers to the map
+            folium.Marker(
+                location=[place['location']['coordinates'][1], place['location']['coordinates'][0]],
+                popup=f"{place['name']} - {place.get('description', 'No description')}",
+                icon=folium.Icon(color=marker_color)
+            ).add_to(day_map)
+
+            # Add detailed info about the place
+            st.write(f"\n**{i+1}: {place['name']}**")
             st.markdown(f"""
             - Khoảng cách: {distance_km:.2f} km
-            - Thời gian di chuyển: {travel_time_minutes} phút
+            - Thời gian di chuyển: {int(travel_time.total_seconds() / 60)} phút
             - Loại hình: {place.get('attraction_type', 'Nhà hàng')}
             - Đánh giá: {place['rating']}
             - Giá: VND{price:,.0f}
@@ -1120,10 +1099,36 @@ def print_itinerary_experience(itinerary):
             else:
                 st.markdown(" -Thời gian ở lại: 1 giờ")
 
+            # Add route to the map
+            if lat1 and lon1 and lat2 and lon2:
+                osrm_url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
+                response = requests.get(osrm_url)
+                data = response.json()
+
+                if 'routes' in data:
+                    route = data['routes'][0]['geometry']['coordinates']
+                    route_latlon = [[coord[1], coord[0]] for coord in route]  # Reverse coordinates
+
+                    # Add route to the map
+                    folium.PolyLine(route_latlon, color="blue", weight=5, opacity=0.7).add_to(day_map)
+
+        # Display the day's map
+        st.write(f"#### Bản đồ cho Ngày {day_index}:")
+        st_folium(day_map, width=700, height=500)
+
+        # Add day map to the combined map
+        combined_map.add_child(day_map)
+
+    # Display combined map
+    st.write("#### Bản đồ Tổng Quát Lộ Trình:")
+    st_folium(combined_map, width=800, height=600)
+
+    # Display totals
     total_hours = total_time.total_seconds() / 3600
     st.write(f"\n**Tổng thời gian (bao gồm di chuyển):** {total_hours:.2f} giờ")
     st.write(f"**Tổng khoảng cách di chuyển:** {total_distance:.2f} km")
-    st.write(f"**Tổng chi phí:** VND{total_price:.2f}")
+    st.write(f"**Tổng chi phí:** VND{total_price:,.2f}")
+
 
 
 #endregion
