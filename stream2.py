@@ -996,7 +996,8 @@ with col1:
                 elif c.get("role") == "assistant":
                     with st.chat_message(name="assistant"):
                         st.write(c.get("content", ""))
-
+def format_address(address):
+    return " ".join(str(value) for value in address.values()).replace(",", "")
 #region Print_screen
 # Cập nhật hàm in lộ trình để hiển thị thông tin lộ trình và vẽ đường đi
 def print_itinerary_experience(itinerary):
@@ -1010,8 +1011,8 @@ def print_itinerary_experience(itinerary):
     total_time = timedelta()
     total_distance = 0
     total_price = hotel_avg_price
-
-    # Generate a separate map for each day or one combined map
+    
+    # Combined map
     combined_map = folium.Map(
         location=[
             hotel['location']['coordinates'][1],
@@ -1019,13 +1020,19 @@ def print_itinerary_experience(itinerary):
         ],
         zoom_start=14
     )
+    hotel_address=format_address(hotel['address'])
+    st.write(f"## Khách sạn: {hotel['name']}")
+    st.write(f"- Địa chỉ: {hotel_address}")
+    st.write(f"- Đánh giá: {hotel['rating']}")
+    st.write(f"- Giá trung bình: VND{hotel_avg_price:,.0f}")
     
-    # Process each day's itinerary
     for day_index, day_itinerary in enumerate(itinerary['days'], start=1):
-        print(f"\nNgày {day_index}:")
         st.write(f"\n### Ngày {day_index}:")
         
-        # Add the hotel location as the starting point
+        daily_distance = 0
+        daily_price = 0
+        daily_time = timedelta()
+        
         locations = [hotel['location']['coordinates']] + [
             place['location']['coordinates'] for place in day_itinerary
         ]
@@ -1038,51 +1045,42 @@ def print_itinerary_experience(itinerary):
             zoom_start=14
         )
 
-        # Add hotel marker
         folium.Marker(
             location=[hotel['location']['coordinates'][1], hotel['location']['coordinates'][0]],
             popup=f"Khách sạn: {hotel['name']}",
             icon=folium.Icon(color='blue')
         ).add_to(day_map)
-
+        
         for i, place in enumerate(day_itinerary):
             lat1, lon1 = locations[i]
             lat2, lon2 = locations[i + 1] if i + 1 < len(locations) else (None, None)
             
-            # Calculate travel time and distance
             if lat1 is not None and lon1 is not None and lat2 is not None and lon2 is not None:
                 distance_meters = haversine([lat1, lon1], [lat2, lon2])
                 distance_km = distance_meters / 1000
-                total_distance += distance_km
-                travel_time_hours = distance_km / 20  # Speed: 20 km/h
+                daily_distance += distance_km
+                travel_time_hours = distance_km / 20
                 travel_time = timedelta(hours=travel_time_hours)
+                daily_time += travel_time
+                total_distance += distance_km
                 total_time += travel_time
-
-            # Calculate time at the location
-            if 'tour_duration' in place:
-                duration = parse_tour_duration(place['tour_duration'])
-            else:
-                duration = timedelta(hours=1)
+            
+            duration = parse_tour_duration(place.get('tour_duration', '1:00'))
+            daily_time += duration
             total_time += duration
-
-            # Calculate price
-            if 'price' in place and isinstance(place['price'], dict):
-                price = sum(place['price'].values()) / len(place['price'].values())
-            else:
-                price = place.get('average_price_per_person', 0)
+            
+            price = sum(place['price'].values()) / len(place['price'].values()) if isinstance(place.get('price'), dict) else place.get('average_price_per_person', 0)
+            daily_price += price
             total_price += price
-
-            # Determine marker color based on type
+            
             marker_color = 'red' if place.get('attraction_type') == 'Attraction' else 'green'
-
-            # Add markers to the map
+            
             folium.Marker(
                 location=[place['location']['coordinates'][1], place['location']['coordinates'][0]],
                 popup=f"{place['name']} - {place.get('description', 'No description')}",
                 icon=folium.Icon(color=marker_color)
             ).add_to(day_map)
-
-            # Add detailed info about the place
+            place_adress=format_address(place['address'])
             st.write(f"\n**{i+1}: {place['name']}**")
             st.markdown(f"""
             - Khoảng cách: {distance_km:.2f} km
@@ -1090,45 +1088,36 @@ def print_itinerary_experience(itinerary):
             - Loại hình: {place.get('attraction_type', 'Nhà hàng')}
             - Đánh giá: {place['rating']}
             - Giá: VND{price:,.0f}
-            - Vị trí: {place['address']}
+            - Vị trí: {place_adress}
             """)
-            if 'tour_duration' in place:
-                duration_hours = int(duration.total_seconds() / 3600)
-                duration_minutes = int((duration.total_seconds() % 3600) / 60)
-                st.markdown(f" -Thời gian ở lại: {duration_hours} giờ {duration_minutes} phút")
-            else:
-                st.markdown(" -Thời gian ở lại: 1 giờ")
-
-            # Add route to the map
+            duration_hours = int(duration.total_seconds() / 3600)
+            duration_minutes = int((duration.total_seconds() % 3600) / 60)
+            st.markdown(f" -Thời gian ở lại: {duration_hours} giờ {duration_minutes} phút")
+            
             if lat1 and lon1 and lat2 and lon2:
                 osrm_url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=full&geometries=geojson"
                 response = requests.get(osrm_url)
                 data = response.json()
-
+                
                 if 'routes' in data:
                     route = data['routes'][0]['geometry']['coordinates']
-                    route_latlon = [[coord[1], coord[0]] for coord in route]  # Reverse coordinates
-
-                    # Add route to the map
+                    route_latlon = [[coord[1], coord[0]] for coord in route]
                     folium.PolyLine(route_latlon, color="blue", weight=5, opacity=0.7).add_to(day_map)
-
-        # Display the day's map
+        
         st.write(f"#### Bản đồ cho Ngày {day_index}:")
         st_folium(day_map, width=700, height=500)
-
-        # Add day map to the combined map
+        
         combined_map.add_child(day_map)
-
-    # Display combined map
+        
+        st.write(f"**Tổng thời gian di chuyển và tham quan Ngày {day_index}:** {daily_time.total_seconds() / 3600:.2f} giờ")
+        st.write(f"**Tổng giá tiền Ngày {day_index}:** VND{daily_price:,.0f}")
+    
     st.write("#### Bản đồ Tổng Quát Lộ Trình:")
     st_folium(combined_map, width=800, height=600)
-
-    # Display totals
-    total_hours = total_time.total_seconds() / 3600
-    st.write(f"\n**Tổng thời gian (bao gồm di chuyển):** {total_hours:.2f} giờ")
+    
+    st.write(f"\n**Tổng thời gian (bao gồm di chuyển):** {total_time.total_seconds() / 3600:.2f} giờ")
     st.write(f"**Tổng khoảng cách di chuyển:** {total_distance:.2f} km")
-    st.write(f"**Tổng chi phí:** VND{total_price:,.2f}")
-
+    st.write(f"**Tổng chi phí cho cả chuyến đi:** VND{total_price:,.0f}")
 
 
 #endregion
